@@ -1,5 +1,5 @@
 // Contact Book - C++17 console application
-// Features: add, search, delete, save, display all contacts.
+// Features: add, search, delete, save, display all contacts, and manage notes.
 // Data persisted to contacts.txt (pipe-delimited, with escaping).
 
 #include <iostream>
@@ -15,13 +15,14 @@ struct Contact {
     std::string phone;
     std::string email;
     std::string address;
+    std::string notes;
 };
 
 static const char* DATA_FILE = "contacts.txt";
 
 // ---------- Escaping helpers ----------
 // Pipes and newlines inside fields are escaped as \p and \n so the
-// format stays one-record-per-line: Name|Phone|Email|Address
+// format stays one-record-per-line: Name|Phone|Email|Address|Notes
 
 std::string escapeField(const std::string& field) {
     std::string out;
@@ -120,6 +121,7 @@ bool loadContacts(std::vector<Contact>& contacts) {
         c.phone = unescapeField(parts[1]);
         c.email = unescapeField(parts[2]);
         c.address = unescapeField(parts[3]);
+        c.notes = (parts.size() >= 5) ? unescapeField(parts[4]) : "";
         contacts.push_back(c);
     }
     return true;
@@ -133,7 +135,8 @@ bool saveContacts(const std::vector<Contact>& contacts) {
         out << escapeField(c.name) << '|'
             << escapeField(c.phone) << '|'
             << escapeField(c.email) << '|'
-            << escapeField(c.address) << '\n';
+            << escapeField(c.address) << '|'
+            << escapeField(c.notes) << '\n';
     }
     return true;
 }
@@ -152,8 +155,9 @@ void addContact(std::vector<Contact>& contacts, bool& dirty) {
     std::string phone = trim(readLine("Phone: "));
     std::string email = trim(readLine("Email: "));
     std::string address = trim(readLine("Address: "));
+    std::string notes = trim(readLine("Notes (optional): "));
 
-    contacts.push_back({name, phone, email, address});
+    contacts.push_back({name, phone, email, address, notes});
     dirty = true;
     std::cout << "Contact added successfully.\n";
 }
@@ -162,7 +166,11 @@ void printContact(size_t index, const Contact& c) {
     std::cout << index << ". " << c.name
                << "\n   Phone:   " << c.phone
                << "\n   Email:   " << c.email
-               << "\n   Address: " << c.address << "\n";
+               << "\n   Address: " << c.address;
+    if (!c.notes.empty()) {
+        std::cout << "\n   Notes:   " << c.notes;
+    }
+    std::cout << "\n";
 }
 
 void displayAll(const std::vector<Contact>& contacts) {
@@ -240,14 +248,65 @@ void deleteContact(std::vector<Contact>& contacts, bool& dirty) {
     std::cout << "Deleted contact: " << removedName << "\n";
 }
 
+void viewEditNotes(std::vector<Contact>& contacts, bool& dirty) {
+    std::cout << "\n--- View/Edit Notes ---\n";
+    if (contacts.empty()) {
+        std::cout << "No contacts available.\n";
+        return;
+    }
+
+    displayAll(contacts);
+    std::string input = trim(readLine("\nEnter the number of the contact to edit notes (0 to cancel): "));
+    if (input.empty()) {
+        std::cout << "Cancelled.\n";
+        return;
+    }
+
+    int choice;
+    try {
+        choice = std::stoi(input);
+    } catch (...) {
+        std::cout << "Invalid input.\n";
+        return;
+    }
+
+    if (choice == 0) {
+        std::cout << "Cancelled.\n";
+        return;
+    }
+    if (choice < 1 || static_cast<size_t>(choice) > contacts.size()) {
+        std::cout << "Invalid selection. Please choose a number between 1 and "
+                  << contacts.size() << ".\n";
+        return;
+    }
+
+    Contact& c = contacts[choice - 1];
+    std::cout << "\nCurrent notes for " << c.name << ":\n";
+    if (c.notes.empty()) {
+        std::cout << "(no notes)\n";
+    } else {
+        std::cout << c.notes << "\n";
+    }
+
+    std::string newNotes = trim(readLine("\nEnter new notes (leave blank to keep existing): "));
+    if (!newNotes.empty()) {
+        c.notes = newNotes;
+        dirty = true;
+        std::cout << "Notes updated.\n";
+    } else if (newNotes.empty() && c.notes.empty()) {
+        std::cout << "No changes made.\n";
+    }
+}
+
 void printMenu() {
     std::cout << "\n===== C++ Contact Book =====\n"
                << "1. Add contact\n"
                << "2. Search contact\n"
                << "3. Delete contact\n"
-               << "4. Save contacts\n"
-               << "5. Display all contacts\n"
-               << "6. Exit\n"
+               << "4. View/Edit notes\n"
+               << "5. Save contacts\n"
+               << "6. Display all contacts\n"
+               << "7. Exit\n"
                << "Choose an option: ";
 }
 
@@ -275,15 +334,17 @@ int main() {
         } else if (choiceStr == "3") {
             deleteContact(contacts, dirty);
         } else if (choiceStr == "4") {
+            viewEditNotes(contacts, dirty);
+        } else if (choiceStr == "5") {
             if (saveContacts(contacts)) {
                 dirty = false;
                 std::cout << "Contacts saved to " << DATA_FILE << ".\n";
             } else {
                 std::cout << "Error: could not write to " << DATA_FILE << ".\n";
             }
-        } else if (choiceStr == "5") {
-            displayAll(contacts);
         } else if (choiceStr == "6") {
+            displayAll(contacts);
+        } else if (choiceStr == "7") {
             if (dirty) {
                 if (saveContacts(contacts)) {
                     std::cout << "Unsaved changes detected. Auto-saved to " << DATA_FILE << ".\n";
@@ -294,7 +355,7 @@ int main() {
             std::cout << "Goodbye!\n";
             running = false;
         } else {
-            std::cout << "Invalid option. Please choose 1-6.\n";
+            std::cout << "Invalid option. Please choose 1-7.\n";
         }
     }
 
